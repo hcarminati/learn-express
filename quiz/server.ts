@@ -1,67 +1,41 @@
 import fs from 'fs';
 import path from 'path';
-import express, { Express, Request, Response, NextFunction } from 'express';
+import express, { Express, Response, NextFunction } from 'express';
 import cors from 'cors';
-
-interface User {
-  id: number;
-  firstName: string;
-  lastName: string;
-  username: string;
-  email: string;
-}
-
-interface UserRequest extends Request {
-  users?: User[];
-}
+import readUsers from './readUsers';
+import writeUsers from './writeUsers';
+import { UserRequest } from './types';
+import { User } from './types';
 
 const app: Express = express();
-const port: number = 8000;
+const port = 8000;
+const dataFile = path.resolve(__dirname, '../data/users.json');
 
-const dataFile = '../data/users.json';
+app.use(express.json());
+app.use(cors({ origin: 'http://localhost:3000' }));
 
-let users: User[];
+let users: User[] = [];
 
-fs.readFile(path.resolve(__dirname, dataFile), (err, data) => {
-  console.log('reading file ... ');
+fs.readFile(dataFile, (err, data) => {
   if (err) throw err;
   users = JSON.parse(data.toString());
 });
 
 const addMsgToRequest = (req: UserRequest, res: Response, next: NextFunction) => {
-  if (users) {
+  if (users && users.length > 0) {
     req.users = users;
     next();
   } else {
-    return res.json({
-      error: { message: 'users not found', status: 404 }
+    return res.status(404).json({
+      error: { message: 'Users not found', status: 404 }
     });
   }
 };
 
-app.use(cors({ origin: 'http://localhost:3000' }));
-app.use('/read/usernames', addMsgToRequest);
+app.use(addMsgToRequest);
 
-app.get('/read/usernames', (req: UserRequest, res: Response) => {
-  let usernames = req.users?.map((user) => {
-    return { id: user.id, username: user.username };
-  });
-  res.send(usernames);
-});
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/write/adduser', addMsgToRequest);
-
-app.post('/write/adduser', (req: UserRequest, res: Response) => {
-  let newuser = req.body as User;
-  users.push(newuser);
-  fs.writeFile(path.resolve(__dirname, dataFile), JSON.stringify(users), (err) => {
-    if (err) console.log('Failed to write');
-    else console.log('User Saved');
-  });
-  res.send('done');
-});
+app.use('/read', readUsers);
+app.use('/write', writeUsers);
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
